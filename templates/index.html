@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Audio Recorder</title>
+</head>
+<body>
+    <h1>Simple Audio Recorder</h1>
+    <button id="startButton">Start Recording</button>
+    <button id="stopButton" disabled>Stop Recording</button>
+    <button id="playButton" disabled>Play Recording</button>
+    <audio id="audioPlayer" controls></audio>
+
+    <script>
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const playButton = document.getElementById('playButton');
+        const audioPlayer = document.getElementById('audioPlayer');
+        let mediaRecorder;
+        let chunks = [];
+
+        startButton.addEventListener('click', () => {
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    mediaRecorder = new MediaRecorder(stream);
+
+                    mediaRecorder.ondataavailable = (event) => {
+                        if (event.data.size > 0) {
+                            chunks.push(event.data);
+                        }
+                    };
+
+                    mediaRecorder.onstop = () => {
+                        const blob = new Blob(chunks, { type: 'audio/wav' });
+                        const formData = new FormData();
+                        formData.append('audio', blob, 'recording.wav');
+
+                        fetch('/upload', {
+                            method: 'POST',
+                            body: formData,
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            console.log(data);
+                            playButton.disabled = false;
+                            audioPlayer.src = `/uploads/${data.filename}`;
+                        })
+                        .catch(error => {
+                            console.error('Error during upload', error);
+                        });
+                    };
+
+                    mediaRecorder.start();
+                    startButton.disabled = true;
+                    stopButton.disabled = false;
+                })
+                .catch(error => {
+                    console.error('Error accessing microphone', error);
+                });
+        });
+
+        stopButton.addEventListener('click', () => {
+            mediaRecorder.stop();
+            startButton.disabled = false;
+            stopButton.disabled = true;
+        });
+
+        playButton.addEventListener('click', () => {
+            audioPlayer.play();
+        });
+    </script>
+</body>
+</html>
