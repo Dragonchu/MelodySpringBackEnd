@@ -1,4 +1,5 @@
-from flask import Flask, render_template, request, send_from_directory
+import librosa
+from flask import Flask, render_template, request, send_from_directory, jsonify
 import os
 
 app = Flask(__name__)
@@ -47,6 +48,20 @@ def upload():
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+
+@app.route('/analyze', methods=['POST'])
+def analyze():
+    audio_path = 'uploads/recording.wav'
+    y, sr = librosa.load(audio_path)
+
+    pitches, magnitudes = librosa.core.piptrack(y=y, sr=sr)
+    pitch = pitches[magnitudes.argmax()]
+
+    # 这里简单地将音高信息转换成字符表示
+    notes = [f'{int(p)}' for p in pitch]
+
+    return jsonify({'notes': notes})
 
 
 if __name__ == '__main__':
