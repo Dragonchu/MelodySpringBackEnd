@@ -14,6 +14,7 @@
 <div id="scoreContainer"></div>
 <audio id="audioPlayer" controls></audio>
 
+<script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.2/build/cjs/vexflow.js"></script>
 <script>
     const startButton = document.getElementById('startButton');
     const stopButton = document.getElementById('stopButton');
@@ -82,7 +83,7 @@
             .then(data => {
                 if (data.notes) {
                     // 存储音符信息
-                    musicNotes = data.notes;
+                    musicNotes = data.notes.map(note => pitchFromNumber(note));
 
                     // 绘制乐谱
                     drawScore();
@@ -116,18 +117,23 @@
 
         // 添加乐谱到容器
         const notes = musicNotes.map(note => new VF.StaveNote({
-            keys: [note],
+            clef: "treble",
+            keys: [pitchFromNumber(note)],
             duration: 'q',
-        }));
+        })).slice(0, 4);
 
         const voice = new VF.Voice({num_beats: 4, beat_value: 4});
+        console.log(notes)
         voice.addTickables(notes);
 
         formatter.joinVoices([voice]).format([voice], 500);
         stave.setContext(context).draw();
         voice.draw(context, stave);
     }
+
+    function pitchFromNumber(noteNumber) {
+        return "c/4";
+    }
 </script>
-<script src="https://unpkg.com/vexflow/releases/vexflow-debug.js"></script>
 </body>
 </html>

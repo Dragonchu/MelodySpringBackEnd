@@ -1,4 +1,5 @@
 import librosa
+import numpy as np
 from flask import Flask, render_template, request, send_from_directory, jsonify
 import os
 
@@ -53,15 +54,24 @@ def uploaded_file(filename):
 @app.route('/analyze', methods=['POST'])
 def analyze():
     audio_path = 'uploads/recording.wav'
-    y, sr = librosa.load(audio_path)
+    y, sr = librosa.load(path=audio_path)
 
-    pitches, magnitudes = librosa.core.piptrack(y=y, sr=sr)
-    pitch = pitches[magnitudes.argmax()]
+    pitches, magnitudes = librosa.core.piptrack(y=y, sr=sr, fmin=75, fmax=1600)
 
-    # 这里简单地将音高信息转换成字符表示
-    notes = [f'{int(p)}' for p in pitch]
+    # Ensure that the shapes of pitches and magnitudes are as expected
+    if pitches.shape[0] == magnitudes.shape[0]:
+        max_indices = np.argmax(magnitudes, axis=0)
 
-    return jsonify({'notes': notes})
+        if max_indices.max() < pitches.shape[1]:
+            pitch = pitches[max_indices, np.arange(pitches.shape[1])]
+
+            # Convert pitch information to integer
+            notes = [int(p) for p in pitch]
+            return jsonify({'notes': notes})
+        else:
+            return jsonify({'error': f"Index {max_indices.max()} is out of bounds for pitches with size {pitches.shape[1]}"})
+    else:
+        return jsonify({'error': "Shapes of pitches and magnitudes do not match"})
 
 
 if __name__ == '__main__':
