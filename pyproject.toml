@@ -9,6 +9,12 @@ readme = "README.md"
 python = "^3.8"
 flask = "^3.0.0"
 librosa = "^0.10.1"
+torch = "2.1.0"
+
+[[tool.poetry.source]]
+name = "mirrors"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple/"
+priority = "primary"
 
 [build-system]
 requires = ["poetry-core"]
