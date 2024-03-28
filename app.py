@@ -1,29 +1,34 @@
-import librosa
-import numpy as np
-from flask import Flask, render_template, request, send_from_directory, jsonify
+import io
+from flask import Flask, render_template, request, send_file, send_from_directory, jsonify
 import os
 import torchaudio
+import torchaudio
+import torch
 from audiocraft.models import MusicGen
 from audiocraft.data.audio import audio_write
 
 app = Flask(__name__)
 
 UPLOAD_FOLDER = 'uploads'
+GENERATE_FOLDER = 'generate'
 ALLOWED_EXTENSIONS = {'wav'}
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['GENERATE_FOLDER'] = GENERATE_FOLDER
 
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-def create_upload_folder():
+def create_folder():
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
         os.makedirs(app.config['UPLOAD_FOLDER'])
+    if not os.path.exists(app.config['GENERATE_FOLDER']):
+        os.makedirs(app.config['GENERATE_FOLDER'])
 
 
-create_upload_folder()
+create_folder()
 
 
 @app.route('/')
@@ -43,53 +48,48 @@ def upload():
 
     if audio_file and allowed_file(audio_file.filename):
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], audio_file.filename)
+        app.config['FILE_PATH'] = file_path
         audio_file.save(file_path)
         return {'message': 'Upload successful', 'filename': audio_file.filename}
     else:
         return {'error': 'Invalid file format'}
-
-
-@app.route('/uploads/<filename>')
-def uploaded_file(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
-
-
-@app.route('/analyze', methods=['POST'])
-def analyze():
-    audio_path = 'uploads/recording.wav'
-
-    model = MusicGen.get_pretrained('facebook/musicgen-melody')
-    model.set_generation_params(duration=8)  # generate 8 seconds.
-    wav = model.generate_unconditional(4)    # generates 4 unconditional audio samples
-    descriptions = ['happy rock', 'energetic EDM', 'sad jazz']
-    wav = model.generate(descriptions)  # generates 3 samples.
     
-    melody, sr = torchaudio.load(audio_path)
+@app.route('/generate')
+def generate():
+    # 设置 WAV 文件的路径
+    wav_file_path = app.config['FILE_PATH']
+
+    # 加载音频文件
+    waveform, sample_rate = torchaudio.load(wav_file_path)
+    # 将波形数据转换为张量
+    waveform_tensor = torch.tensor(waveform)
+
+    model = MusicGen.get_pretrained('facebook/musicgen-melody', device='cpu')
+    model.set_generation_params(duration=8)  # generate 8 seconds.
+    descriptions = ['Jazz']
+    wav = model.generate_with_chroma(descriptions=descriptions,melody_wavs=waveform_tensor,melody_sample_rate=sample_rate,progress=True)  # generates 3 samples.
+
     # generates using the melody from the given audio and the provided descriptions.
-    wav = model.generate_with_chroma(descriptions, melody[None].expand(3, -1, -1), sr)
     for idx, one_wav in enumerate(wav):
         # Will save under {idx}.wav, with loudness normalization at -14 db LUFS.
-        audio_write(f'{idx}', one_wav.cpu(), model.sample_rate, strategy="loudness", loudness_compressor=True)
-    return
-    y, sr = librosa.load(path=audio_path)
+        save_path = os.path.join(app.config['GENERATE_FOLDER'], f'{idx}')
+        app.config['SAVE_PATH'] = save_path
+        audio_write(save_path, one_wav.cpu(), model.sample_rate, strategy="loudness", loudness_compressor=True)
 
-    pitches, magnitudes = librosa.core.piptrack(y=y, sr=sr, fmin=75, fmax=1600)
+    generate_file_path = app.config['SAVE_PATH']+".wav"
+    # 检查文件是否存在
+    if not os.path.exists(generate_file_path):
+        return "File not found", 404
 
-    # Ensure that the shapes of pitches and magnitudes are as expected
-    if pitches.shape[0] == magnitudes.shape[0]:
-        max_indices = np.argmax(magnitudes, axis=0)
+    # 以二进制模式读取文件
+    with open(generate_file_path, 'rb') as f:
+        wav_data = f.read()
 
-        if max_indices.max() < pitches.shape[1]:
-            pitch = pitches[max_indices, np.arange(pitches.shape[1])]
-
-            # Convert pitch information to integer
-            notes = [int(p) for p in pitch]
-            return jsonify({'notes': notes})
-        else:
-            return jsonify({'error': f"Index {max_indices.max()} is out of bounds for pitches with size {pitches.shape[1]}"})
-    else:
-        return jsonify({'error': "Shapes of pitches and magnitudes do not match"})
-
+    # 返回 WAV 文件给客户端
+    return send_file(
+        io.BytesIO(wav_data),
+        mimetype='audio/wav',
+    )
 
 if __name__ == '__main__':
     app.run(debug=True)
