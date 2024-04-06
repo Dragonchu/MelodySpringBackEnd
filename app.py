@@ -1,11 +1,11 @@
 import io
-from flask import Flask, render_template, request, send_file, send_from_directory, jsonify
 import os
-import torchaudio
-import torchaudio
+
 import torch
-from audiocraft.models import MusicGen
+import torchaudio
 from audiocraft.data.audio import audio_write
+from audiocraft.models import MusicGen
+from flask import Flask, render_template, request, send_file
 
 app = Flask(__name__)
 
@@ -53,7 +53,8 @@ def upload():
         return {'message': 'Upload successful', 'filename': audio_file.filename}
     else:
         return {'error': 'Invalid file format'}
-    
+
+
 @app.route('/generate')
 def generate():
     # 设置 WAV 文件的路径
@@ -67,7 +68,8 @@ def generate():
     model = MusicGen.get_pretrained('facebook/musicgen-melody', device='cpu')
     model.set_generation_params(duration=8)  # generate 8 seconds.
     descriptions = ['Jazz']
-    wav = model.generate_with_chroma(descriptions=descriptions,melody_wavs=waveform_tensor,melody_sample_rate=sample_rate,progress=True)  # generates 3 samples.
+    wav = model.generate_with_chroma(descriptions=descriptions, melody_wavs=waveform_tensor,
+                                     melody_sample_rate=sample_rate, progress=True)  # generates 3 samples.
 
     # generates using the melody from the given audio and the provided descriptions.
     for idx, one_wav in enumerate(wav):
@@ -76,7 +78,7 @@ def generate():
         app.config['SAVE_PATH'] = save_path
         audio_write(save_path, one_wav.cpu(), model.sample_rate, strategy="loudness", loudness_compressor=True)
 
-    generate_file_path = app.config['SAVE_PATH']+".wav"
+    generate_file_path = app.config['SAVE_PATH'] + ".wav"
     # 检查文件是否存在
     if not os.path.exists(generate_file_path):
         return "File not found", 404
@@ -90,6 +92,7 @@ def generate():
         io.BytesIO(wav_data),
         mimetype='audio/wav',
     )
+
 
 if __name__ == '__main__':
     app.run(debug=True)
