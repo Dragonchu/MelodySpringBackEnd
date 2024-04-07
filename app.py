@@ -1,11 +1,20 @@
 import io
 import os
+from threading import Thread
 
+import numpy as np
 import torch
 import torchaudio
 from audiocraft.data.audio import audio_write
 from audiocraft.models import MusicGen
 from flask import Flask, render_template, request, send_file
+from scipy.io.wavfile import write
+from transformers import MusicgenForConditionalGeneration, MusicgenProcessor, set_seed
+from transformers.generation.streamers import BaseStreamer
+from flask import stream_with_context, request
+
+import processing_util
+from MusicGenStreamer import MusicgenStreamer
 
 app = Flask(__name__)
 
@@ -15,6 +24,83 @@ ALLOWED_EXTENSIONS = {'wav'}
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['GENERATE_FOLDER'] = GENERATE_FOLDER
+
+model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
+processor = MusicgenProcessor.from_pretrained("facebook/musicgen-small")
+
+model.audio_encoder.config.sampling_rate = 44100
+sampling_rate = model.audio_encoder.config.sampling_rate
+print(sampling_rate)
+frame_rate = model.audio_encoder.config.frame_rate
+
+target_dtype = np.int16
+max_range = np.iinfo(target_dtype).max
+
+
+def generate_audio(text_prompt, audio_length_in_s=10.0, play_steps_in_s=2.0, seed=5):
+    max_new_tokens = int(frame_rate * audio_length_in_s)
+    play_steps = int(frame_rate * play_steps_in_s)
+
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    if device != model.device:
+        model.to(device)
+        if device == "cuda:0":
+            model.half()
+
+    inputs = processor(
+        text=text_prompt,
+        padding=True,
+        return_tensors="pt",
+    )
+
+    streamer = MusicgenStreamer(model, device=device, play_steps=play_steps)
+
+    generation_kwargs = dict(
+        **inputs.to(device),
+        streamer=streamer,
+        max_new_tokens=max_new_tokens,
+    )
+    thread = Thread(target=model.generate, kwargs=generation_kwargs)
+    thread.start()
+
+    set_seed(seed)
+    first_chunk = True
+    for new_audio in streamer:
+        print(f"Sample of length: {round(new_audio.shape[0] / sampling_rate, 2)} seconds")
+        new_audio = (new_audio * max_range).astype(np.int16)
+        new_wav = ndarray_to_wav_bytes(new_audio, sampling_rate)
+        # strip length information from first chunk header, remove headers entirely from subsequent chunks
+        if first_chunk:
+            new_wav = (
+                    new_wav[:4] + b"\xFF\xFF\xFF\xFF" + new_wav[8:]
+            )
+            new_wav = (
+                    new_wav[:40] + b"\xFF\xFF\xFF\xFF" + new_wav[44:]
+            )
+            first_chunk = False
+        else:
+            new_wav = new_wav[44:]
+        yield new_wav
+
+
+def ndarray_to_wav_bytes(ndarray, sample_rate):
+    """
+    Convert a numpy ndarray to WAV format as bytes array.
+
+    Args:
+    - ndarray: numpy ndarray containing audio data
+    - sample_rate: sample rate of the audio data
+
+    Yields:
+    - bytes: WAV format data as bytes array
+    """
+    # Ensure the ndarray is of appropriate data type (int16)
+    ndarray = np.int32(ndarray * 32767.0)
+
+    # Write ndarray to WAV file in memory
+    with io.BytesIO() as wav_bytes:
+        write(wav_bytes, sample_rate, ndarray)
+        return wav_bytes.getvalue()
 
 
 def allowed_file(filename):
@@ -29,11 +115,6 @@ def create_folder():
 
 
 create_folder()
-
-
-@app.route('/')
-def index():
-    return render_template('index.html')
 
 
 @app.route('/upload', methods=['POST'])
@@ -92,6 +173,11 @@ def generate():
         io.BytesIO(wav_data),
         mimetype='audio/wav',
     )
+
+
+@app.route('/streamGen')
+def stream_gen():
+    return generate_audio("90s rock song with electric guitar and heavy drums"), {"Content-Type": 'audio/wav'}
 
 
 if __name__ == '__main__':

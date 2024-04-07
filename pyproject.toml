@@ -10,6 +10,9 @@ python = "^3.8"
 flask = "^3.0.0"
 librosa = "^0.10.1"
 torch = "2.1.0"
+flask-socketio = "^5.3.6"
+transformers = "^4.39.3"
+pydub = "^0.25.1"
 
 [[tool.poetry.source]]
 name = "mirrors"
