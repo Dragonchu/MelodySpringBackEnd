@@ -7,13 +7,11 @@ import torch
 import torchaudio
 from audiocraft.data.audio import audio_write
 from audiocraft.models import MusicGen
-from flask import Flask, render_template, request, send_file
+from flask import Flask, send_file
+from flask import request
 from scipy.io.wavfile import write
 from transformers import MusicgenForConditionalGeneration, MusicgenProcessor, set_seed
-from transformers.generation.streamers import BaseStreamer
-from flask import stream_with_context, request
 
-import processing_util
 from MusicGenStreamer import MusicgenStreamer
 
 app = Flask(__name__)
@@ -25,12 +23,11 @@ ALLOWED_EXTENSIONS = {'wav'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['GENERATE_FOLDER'] = GENERATE_FOLDER
 
-model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
-processor = MusicgenProcessor.from_pretrained("facebook/musicgen-small")
+model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-melody")
+processor = MusicgenProcessor.from_pretrained("facebook/musicgen-melody")
 
 model.audio_encoder.config.sampling_rate = 44100
 sampling_rate = model.audio_encoder.config.sampling_rate
-print(sampling_rate)
 frame_rate = model.audio_encoder.config.frame_rate
 
 target_dtype = np.int16
@@ -177,7 +174,7 @@ def generate():
 
 @app.route('/streamGen')
 def stream_gen():
-    return generate_audio("90s rock song with electric guitar and heavy drums"), {"Content-Type": 'audio/wav'}
+    return generate_audio("An 80s driving pop song with heavy drums and synth pads in the background", audio_length_in_s=10), {"Content-Type": 'audio/wav'}
 
 
 if __name__ == '__main__':

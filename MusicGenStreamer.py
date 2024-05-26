@@ -7,7 +7,6 @@ from transformers import MusicgenForConditionalGeneration
 from transformers.generation.streamers import BaseStreamer
 
 
-
 class MusicgenStreamer(BaseStreamer):
     def __init__(
             self,
