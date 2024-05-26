@@ -10,9 +10,9 @@ from audiocraft.models import MusicGen
 from flask import Flask, send_file
 from flask import request
 from scipy.io.wavfile import write
-from transformers import MusicgenForConditionalGeneration, MusicgenProcessor, set_seed
+from transformers import MusicgenForConditionalGeneration, MusicgenProcessor, set_seed, AutoProcessor
 
-from MusicGenStreamer import MusicgenStreamer
+from llm.MusicGenStreamer import MusicgenStreamer
 
 app = Flask(__name__)
 
@@ -24,7 +24,7 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['GENERATE_FOLDER'] = GENERATE_FOLDER
 
 model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-melody")
-processor = MusicgenProcessor.from_pretrained("facebook/musicgen-melody")
+processor = AutoProcessor.from_pretrained("facebook/musicgen-melody")
 
 model.audio_encoder.config.sampling_rate = 44100
 sampling_rate = model.audio_encoder.config.sampling_rate
@@ -174,7 +174,15 @@ def generate():
 
 @app.route('/streamGen')
 def stream_gen():
-    return generate_audio("An 80s driving pop song with heavy drums and synth pads in the background", audio_length_in_s=10), {"Content-Type": 'audio/wav'}
+    return generate_audio("An 80s driving pop song with heavy drums and synth pads in the background",
+                          audio_length_in_s=10), {"Content-Type": 'audio/wav'}
+
+
+@app.route('/streamCanvasMusic', methods=['POST'])
+def stream_canvas_music():
+    curves = request.form
+    print(curves)
+    return {"message": "success"}
 
 
 if __name__ == '__main__':
